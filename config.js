@@ -8,7 +8,7 @@ var CONFIG = {
   // Your Cloudflare Worker URL once relay-worker.js is deployed, e.g.
   // "https://chiswick-relay.harry.workers.dev"
   // Leave blank to try the aircraft feeds directly (often blocked by the browser).
-  relay: "",
+  relay: "https://chiswick-relay.harry-fotheringham.workers.dev/",
 
   home: { label: "Home", postcode: "W4 1SE", lat: 51.4952, lon: -0.2478 },
 
