@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chiswick Board · Routes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="board.css">
+<style>
+/* Layout: header with weather, two commuter columns side by side, line-status strip along the bottom. */
+.shell{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:calc(var(--u)*0.8)}
+
+/* weather in header */
+.now{display:flex;align-items:center;gap:calc(var(--u)*0.7);margin-left:calc(var(--u)*0.6);padding-left:calc(var(--u)*1.4);border-left:1px solid var(--line)}
+.now .t{font-family:var(--display);font-size:calc(var(--u)*2.6);font-weight:600;line-height:1}
+.now .d{line-height:1.25;font-size:calc(var(--u)*1.0);color:var(--muted)}
+.now .d b{color:var(--fg);font-weight:600}
+.hours{margin-left:auto;display:flex;gap:calc(var(--u)*0.25)}
+.hr{display:flex;flex-direction:column;align-items:center;gap:.15em;padding:.3em .55em;border-radius:4px;min-width:calc(var(--u)*3.6)}
+.hr .h{font-family:var(--mono);font-size:calc(var(--u)*0.8);color:var(--muted)}
+.hr .tp{font-family:var(--display);font-weight:600;font-size:calc(var(--u)*1.2)}
+.hr .rp{font-family:var(--mono);font-size:calc(var(--u)*0.75);color:#7cc4ff}
+.hr .rp.dry{color:var(--faint)}
+.hr.wet{background:rgba(124,196,255,.08)}
+
+/* commuter columns */
+.people{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:calc(var(--u)*0.9);min-height:0}
+.person{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.ptop{display:flex;align-items:flex-start;gap:calc(var(--u)*1);padding:calc(var(--u)*0.8) calc(var(--u)*1)}
+.who .name{font-family:var(--display);font-size:calc(var(--u)*1.9);font-weight:600;line-height:1}
+.who .dest{color:var(--muted);font-size:calc(var(--u)*0.95);margin-top:.2em}
+.pill{margin-left:auto;font-family:var(--display);text-transform:uppercase;letter-spacing:.08em;font-size:calc(var(--u)*0.95);padding:.25em .65em;border-radius:3px;border:1px solid;white-space:nowrap}
+.pill.good{color:var(--good);border-color:#1f5a43;background:rgba(62,207,142,.07)}
+.pill.warn{color:var(--warn);border-color:#6a5220;background:rgba(255,182,39,.08)}
+.pill.bad{color:var(--bad);border-color:#6e2a2a;background:rgba(255,93,93,.08)}
+.headline{display:flex;align-items:flex-end;gap:calc(var(--u)*1.2);padding:0 calc(var(--u)*1) calc(var(--u)*0.7)}
+.mins{font-family:var(--display);font-weight:700;font-size:calc(var(--u)*4.6);line-height:.82;color:var(--amber);font-variant-numeric:tabular-nums}
+.mins small{font-size:.32em;font-weight:500;color:var(--muted);margin-left:.12em;letter-spacing:.04em}
+.arrive{font-family:var(--display);font-size:calc(var(--u)*1.3);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;line-height:1.15}
+.arrive b{color:var(--fg);font-size:1.35em;font-weight:600;font-variant-numeric:tabular-nums}
+.destwx{margin-left:auto;display:flex;align-items:center;gap:.45em;color:var(--muted);font-size:calc(var(--u)*0.95);line-height:1.2;text-align:right}
+.destwx b{color:var(--fg);font-family:var(--display);font-size:1.4em;font-weight:600}
+.pmap{flex:1 1 auto;min-height:calc(var(--u)*16);display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.mainmap{grid-row:1/3;position:relative;min-height:0}
+.inset{position:relative;min-height:0;background:#0d141c}
+.inset.solo{grid-row:1/3}
+.mainmap > .lmap,.inset > .lmap{position:absolute;inset:0}
+.icap{position:absolute;left:0;right:0;bottom:0;z-index:600;padding:.5em .7em .45em;background:linear-gradient(to top,rgba(11,17,24,.95),rgba(11,17,24,.75) 70%,rgba(11,17,24,0));font-size:calc(var(--u)*0.85);line-height:1.25;color:#b6c2ce}
+.icap b{color:var(--fg);font-weight:600}
+.icap .k{display:block;font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:.9em;color:var(--muted)}
+.leaflet-tile-pane{filter:brightness(1.55) contrast(1.05)}
+.mstop{width:7px;height:7px;border-radius:50%;background:#e8eef4;border:2px solid #0b1118}
+.steps{padding:calc(var(--u)*0.6) calc(var(--u)*1) calc(var(--u)*0.4);display:flex;flex-direction:column;gap:.15em}
+.step{display:grid;grid-template-columns:calc(var(--u)*3.6) .35em minmax(0,1fr) auto;align-items:center;gap:.6em;font-size:calc(var(--u)*1.05);padding:.22em 0}
+.step .tm{font-family:var(--mono);font-size:.85em;color:var(--muted);font-variant-numeric:tabular-nums}
+.step .bar{align-self:stretch;border-radius:2px;min-height:1.2em}
+.step .ins{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step.walk .ins{color:#b6c2ce}
+.step .du{font-family:var(--mono);font-size:.85em;color:var(--muted)}
+.step.end .ins{font-weight:600}
+.alerts{padding:0 calc(var(--u)*1);display:flex;flex-direction:column;gap:.3em}
+.alert{font-size:calc(var(--u)*0.92);line-height:1.3;padding:.4em .6em;border-radius:3px;background:rgba(255,182,39,.1);border-left:3px solid var(--warn);color:#f5dfb3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.alert.bad{background:rgba(255,93,93,.1);border-left-color:var(--bad);color:#ffcfcf}
+.alts{margin-top:auto;display:flex;flex-wrap:wrap;gap:.3em 1.2em;color:var(--muted);font-size:calc(var(--u)*0.9);padding:calc(var(--u)*0.55) calc(var(--u)*1);border-top:1px solid var(--line)}
+.alts b{color:var(--fg);font-variant-numeric:tabular-nums}
+.perr{padding:calc(var(--u)*1)}
+
+/* map overlays */
+.stop{width:12px;height:12px;border-radius:50%;background:#0b1118;border:3px solid currentColor}
+.stoplabel{font-family:var(--display);font-size:12px;letter-spacing:.04em;color:#e8eef4;text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000;white-space:nowrap;margin:-2px 0 0 15px}
+
+/* line strip */
+.strip{display:flex;align-items:center;gap:calc(var(--u)*1.1);padding:calc(var(--u)*0.55) calc(var(--u)*0.9);overflow:hidden}
+.strip .eyebrow{flex:0 0 auto}
+.ls{display:inline-flex;align-items:center;gap:.45em;font-size:calc(var(--u)*0.95);white-space:nowrap}
+.ls .sw{width:.4em;height:1.2em;border-radius:2px}
+.ls .ln{font-weight:600}
+.ls .st{font-family:var(--display);text-transform:uppercase;letter-spacing:.04em;color:var(--good)}
+.ls .st.warn{color:var(--warn)}
+.ls .st.bad{color:var(--bad)}
+#lineitems{display:flex;flex-wrap:wrap;gap:.35em calc(var(--u)*1.2);min-width:0;max-height:2.8em;overflow:hidden}
+
+@media (max-width:900px){
+  html,body{overflow:auto}
+  .shell{height:auto;display:flex;flex-direction:column}
+  .people{grid-template-columns:1fr}
+  .pmap{height:50vh}
+  .hours{display:none}
+}
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+  <header class="top">
+    <div class="clock" id="clock">--:--</div>
+    <div class="date" id="date"></div>
+    <div class="now" id="now"><span class="err">Loading weather…</span></div>
+    <div class="hours" id="hours"></div>
+  </header>
+
+  <main class="people">
+    <section class="card person" id="p-harry"><div class="perr err">Planning Harry's route…</div></section>
+    <section class="card person" id="p-savanna"><div class="perr err">Planning Savanna's route…</div></section>
+  </main>
+
+  <footer class="card strip">
+    <div class="eyebrow"><span>Lines</span><span class="stamp" id="stamp"></span></div>
+    <div id="lineitems"><span class="err">Loading line status…</span></div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+var state = {};        // per person: {map, layer, journey}
+var lineStatus = {};   // line id -> {name, sev, desc, reason}
+var usedLines = {};
+var destWx = {};       // person id -> open-meteo response
+
+/* ---------- weather ---------- */
+function refreshWeather(){
+  U.weather(CONFIG.home.lat, CONFIG.home.lon, "mph").then(function(w){
+    var c = w.current;
+    U.$("now").innerHTML = U.wxIcon(c.weather_code, c.is_day, 44) +
+      '<div class="t">'+Math.round(c.temperature_2m)+'°</div>' +
+      '<div class="d"><b>'+U.wxText(c.weather_code)+'</b><br>Feels '+Math.round(c.apparent_temperature)+'° · '+
+      U.compass(c.wind_direction_10m)+' '+Math.round(c.wind_speed_10m)+' mph</div>';
+    var i = U.hourIndex(w), out = [];
+    for (var k=1; k<=6 && i+k<w.hourly.time.length; k++){
+      var j=i+k, p=w.hourly.precipitation_probability[j];
+      out.push('<div class="hr'+(p>=40?' wet':'')+'"><span class="h">'+w.hourly.time[j].slice(11,16)+'</span>'+
+        U.wxIcon(w.hourly.weather_code[j], w.hourly.is_day[j], 24)+
+        '<span class="tp">'+Math.round(w.hourly.temperature_2m[j])+'°</span>'+
+        '<span class="rp'+(p<20?' dry':'')+'">'+p+'%</span></div>');
+    }
+    U.$("hours").innerHTML = out.join("");
+  })["catch"](function(e){ U.$("now").innerHTML = '<span class="err">Weather unavailable ('+U.esc(e.message)+')</span>'; });
+
+  CONFIG.people.forEach(function(p){
+    U.weather(p.lat, p.lon, "mph").then(function(w){ destWx[p.id]=w; if (state[p.id] && state[p.id].journey) render(p, state[p.id].journey, state[p.id].alts); })["catch"](function(){});
+  });
+}
+
+/* ---------- journeys ---------- */
+function legInfo(leg){
+  var mode = leg.mode && leg.mode.id;
+  var opt = (leg.routeOptions && leg.routeOptions[0]) || {};
+  var lineId = opt.lineIdentifier && opt.lineIdentifier.id;
+  var name = opt.name || (leg.mode && leg.mode.name) || mode;
+  if (mode==="elizabeth-line") name = "Elizabeth";
+  var colour = mode==="walking" ? U.MODE_COLOURS.walking : (U.LINE_COLOURS[lineId] || U.MODE_COLOURS[mode] || "#8a9bad");
+  if (mode==="bus") colour = U.MODE_COLOURS.bus;
+  return { mode:mode, line:(mode==="bus"?null:lineId), name:(mode==="bus"?"Bus "+name:name), colour:colour, walk:mode==="walking" };
+}
+function shortStop(s){ return String(s||"").replace(/ (Underground|Rail|DLR|Elizabeth line) Station$/,"").replace(/ Station$/,"").replace(/ \((.*)\)$/,""); }
+function parsePath(leg){
+  try { return JSON.parse(leg.path.lineString); } catch(e){ return null; }
+}
+function streetsOf(leg){
+  var seen = {}, out = [];
+  ((leg.instruction && leg.instruction.steps) || []).forEach(function(st){
+    var n = (st.streetName || "").trim();
+    if (n && !seen[n] && !/^(for|on|un-?named)/i.test(n)){ seen[n]=true; out.push(n); }
+  });
+  return out;
+}
+function walkLegs(j){
+  var legs = j.legs || [], first = null, last = null;
+  if (legs.length && legs[0].mode && legs[0].mode.id==="walking") first = legs[0];
+  if (legs.length>1 && legs[legs.length-1].mode && legs[legs.length-1].mode.id==="walking") last = legs[legs.length-1];
+  return {first:first, last:last};
+}
+function drawLeg(layer, l, weightScale){
+  var info = legInfo(l), pts = parsePath(l), w = weightScale || 1;
+  if (!pts || !pts.length) return [];
+  if (info.walk){
+    L.polyline(pts,{color:"#0b1118",weight:7*w,opacity:.6,lineCap:"round"}).addTo(layer);
+    L.polyline(pts,{color:"#e8eef4",weight:3.5*w,opacity:.95,dashArray:(1*w)+" "+(8*w),lineCap:"round"}).addTo(layer);
+  } else {
+    L.polyline(pts,{color:"#0b1118",weight:10*w,opacity:.9,lineJoin:"round"}).addTo(layer);
+    L.polyline(pts,{color:info.colour,weight:6*w,opacity:1,lineJoin:"round"}).addTo(layer);
+    // intermediate stops, when TfL includes their coordinates
+    ((l.path && l.path.stopPoints) || []).forEach(function(sp){
+      if (sp.lat==null || sp.lon==null) return;
+      L.marker([sp.lat,sp.lon],{interactive:false,icon:L.divIcon({className:"",iconSize:[7,7],iconAnchor:[3.5,3.5],html:'<div class="mstop"></div>'})}).addTo(layer);
+    });
+  }
+  return pts;
+}
+function drawInset(s, key, leg, endLabel, endColour, startIsHome){
+  var box = s[key+"Box"], m = s[key+"Map"], layer = s[key+"Layer"];
+  if (!leg){ box.hidden = true; return; }
+  box.hidden = false;
+  layer.clearLayers();
+  var pts = drawLeg(layer, leg, 1.2) || [];
+  var a = leg.departurePoint || {}, b = leg.arrivalPoint || {};
+  var startLL = startIsHome ? [CONFIG.home.lat, CONFIG.home.lon] : [a.lat, a.lon];
+  var endLL = startIsHome ? [b.lat, b.lon] : [b.lat!=null?b.lat:endLabel.lat, b.lon!=null?b.lon:endLabel.lon];
+  if (startIsHome){
+    U.pin(layer, startLL[0], startLL[1], "Home", "#ffb627");
+    if (b.lat!=null) L.marker([b.lat,b.lon],{interactive:false,icon:L.divIcon({className:"",iconSize:[12,12],iconAnchor:[6,6],
+      html:'<div class="stop" style="color:'+endColour+'"></div><div class="stoplabel">'+U.esc(shortStop(b.commonName))+'</div>'})}).addTo(layer);
+  } else {
+    if (a.lat!=null) L.marker([a.lat,a.lon],{interactive:false,icon:L.divIcon({className:"",iconSize:[12,12],iconAnchor:[6,6],
+      html:'<div class="stop" style="color:'+endColour+'"></div><div class="stoplabel">'+U.esc(shortStop(a.commonName))+'</div>'})}).addTo(layer);
+    U.pin(layer, endLL[0], endLL[1], endLabel.text, "#ffffff");
+  }
+  var bounds = pts.slice();
+  if (startLL[0]!=null) bounds.push(startLL);
+  if (endLL[0]!=null) bounds.push(endLL);
+  m.invalidateSize();
+  if (bounds.length) m.fitBounds(bounds,{paddingTopLeft:[24,24],paddingBottomRight:[130,60],maxZoom:17});
+  var streets = streetsOf(leg).slice(0,3);
+  var where = startIsHome ? "to "+shortStop(b.commonName) : "from "+shortStop(a.commonName);
+  s[key+"Box"].querySelector(".icap").innerHTML = '<span class="k">'+(startIsHome?"First walk":"Last walk")+'</span>'+
+    '<b>'+leg.duration+' min</b> '+U.esc(where)+(streets.length?'<br>via '+U.esc(streets.join(", ")):'');
+}
+
+function nearHome(pt){ // the first-walk inset already labels the home station
+  var dLat=(pt.lat-CONFIG.home.lat)*111, dLon=(pt.lon-CONFIG.home.lon)*69;
+  return Math.sqrt(dLat*dLat+dLon*dLon) < 1.2;
+}
+function drawRoute(p, j, alts){
+  var s = state[p.id];
+  s.layer.clearLayers();
+  var bounds = [];
+  // faint alternative
+  if (alts && alts[0]) (alts[0].legs||[]).forEach(function(l){
+    var pts = parsePath(l); if (!pts) return;
+    L.polyline(pts,{color:"#8a9bad",weight:3,opacity:.22,dashArray:"2 6"}).addTo(s.layer);
+  });
+  (j.legs||[]).forEach(function(l){ bounds = bounds.concat(drawLeg(s.layer, l, 1)); });
+  // interchange markers where you board a vehicle
+  (j.legs||[]).forEach(function(l){
+    var info = legInfo(l), dp = l.departurePoint;
+    if (info.walk || !dp || dp.lat==null) return;
+    L.marker([dp.lat,dp.lon],{interactive:false,zIndexOffset:500,icon:L.divIcon({className:"",iconSize:[12,12],iconAnchor:[6,6],
+      html:'<div class="stop" style="color:'+info.colour+'"></div>'+(nearHome(dp)?'':'<div class="stoplabel">'+U.esc(shortStop(dp.commonName))+'</div>')})}).addTo(s.layer);
+  });
+  var legs = j.legs||[], last = legs[legs.length-1];
+  U.pin(s.layer, CONFIG.home.lat, CONFIG.home.lon, "Home", "#ffb627");
+  var ap = last && last.arrivalPoint;
+  var dLat = ap && ap.lat!=null ? ap.lat : p.lat, dLon = ap && ap.lon!=null ? ap.lon : p.lon;
+  U.pin(s.layer, dLat, dLon, p.pinLabel || "Work", "#ffffff");
+  bounds.push([CONFIG.home.lat,CONFIG.home.lon],[dLat,dLon]);
+
+  // street-level insets for the walks at each end
+  var w = walkLegs(j), rides = legs.filter(function(l){return l.mode && l.mode.id!=="walking";});
+  var firstColour = rides.length ? legInfo(rides[0]).colour : "#e8eef4";
+  var lastColour = rides.length ? legInfo(rides[rides.length-1]).colour : "#e8eef4";
+  // only worth an inset if the walk is a few minutes and there is a ride in between
+  var showFirst = w.first && rides.length && w.first.duration>=3 ? w.first : null;
+  var showLast = w.last && rides.length && w.last.duration>=3 ? w.last : null;
+  s.mainBox.style.gridColumn = (showFirst || showLast) ? "" : "1 / 3";
+  s.startBox.className = "inset"+(showFirst && !showLast ? " solo" : "");
+  s.endBox.className = "inset"+(showLast && !showFirst ? " solo" : "");
+  s.startBox.hidden = !showFirst; s.endBox.hidden = !showLast;
+  drawInset(s, "start", showFirst, null, firstColour, true);
+  drawInset(s, "end", showLast, {text:p.pinLabel||"Work", lat:p.lat, lon:p.lon}, lastColour, false);
+
+  s.map.invalidateSize();
+  s.map.fitBounds(bounds,{paddingTopLeft:[40,40],paddingBottomRight:[120,40]});
+}
+
+function render(p, j, alts){
+  var el = U.$("p-"+p.id), arrive = new Date(j.arrivalDateTime), depart = new Date(j.startDateTime);
+  var legs = j.legs||[], alerts = {}, ids = [];
+  legs.forEach(function(l){
+    var info = legInfo(l);
+    if (info.line){ ids.push(info.line); usedLines[info.line]=true; }
+    (l.disruptions||[]).forEach(function(d){
+      if (d.description && d.category!=="Information" && d.category!=="PlannedWork") alerts[d.description] = d.category==="RealTime" ? "bad" : "";
+    });
+  });
+  ids.forEach(function(id){
+    var st = lineStatus[id];
+    if (st && st.sev<10 && st.reason) alerts[st.reason] = st.sev<=6 ? "bad" : "";
+  });
+  var alertKeys = Object.keys(alerts), anyBad = alertKeys.some(function(k){return alerts[k]==="bad";});
+  var pill = !alertKeys.length ? '<span class="pill good">Good service</span>' :
+    '<span class="pill '+(anyBad?'bad':'warn')+'">'+(anyBad?'Disruption':'Minor delays')+'</span>';
+
+  // weather at destination on arrival
+  var dw = destWx[p.id], dwHtml = "";
+  if (dw){
+    var i = U.hourIndex(dw, arrive);
+    dwHtml = '<div class="destwx">'+U.wxIcon(dw.hourly.weather_code[i], dw.hourly.is_day[i], 30)+
+      '<div>On arrival<br><b>'+Math.round(dw.hourly.temperature_2m[i])+'°</b> '+dw.hourly.precipitation_probability[i]+'% rain</div></div>';
+  }
+
+  var steps = legs.filter(function(l){ return !(l.mode && l.mode.id==="walking" && l.duration<2); }).map(function(l){
+    var info = legInfo(l), sum = (l.instruction && l.instruction.summary) || info.name;
+    if (info.walk){ var st = streetsOf(l); if (st.length) sum += " via "+st.slice(0,2).join(", "); }
+    return '<div class="step'+(info.walk?' walk':'')+'"><span class="tm">'+U.hhmm(new Date(l.departureTime))+'</span>'+
+      '<span class="bar" style="background:'+info.colour+'"></span><span class="ins">'+U.esc(sum)+'</span>'+
+      '<span class="du">'+l.duration+' min</span></div>';
+  });
+  steps.push('<div class="step end"><span class="tm">'+U.hhmm(arrive)+'</span><span class="bar" style="background:#fff"></span><span class="ins">Arrive '+U.esc(p.destLabel.split(",")[0])+'</span><span class="du"></span></div>');
+
+  var altHtml = (alts||[]).slice(0,2).map(function(a){
+    var names = (a.legs||[]).filter(function(l){return l.mode && l.mode.id!=="walking";}).map(function(l){return legInfo(l).name;}).join(" + ");
+    return '<span><b>'+a.duration+' min</b> '+U.esc(names||"Walk")+'</span>';
+  }).join("");
+
+  if (!state[p.id].built){
+    el.innerHTML = '<div class="ptop"></div><div class="headline"></div>'+
+      '<div class="pmap"><div class="mainmap"><div class="lmap" id="map-'+p.id+'"></div></div>'+
+      '<div class="inset"><div class="lmap" id="ims-'+p.id+'"></div><div class="icap"></div></div>'+
+      '<div class="inset"><div class="lmap" id="ime-'+p.id+'"></div><div class="icap"></div></div></div>'+
+      '<div class="steps"></div><div class="alerts"></div><div class="alts"></div>';
+    var s = state[p.id], boxes = el.querySelectorAll(".inset");
+    s.mainBox = el.querySelector(".mainmap");
+    s.map = U.baseMap("map-"+p.id, {labelsOnTop:true}); s.layer = L.layerGroup().addTo(s.map);
+    s.startBox = boxes[0]; s.startMap = U.baseMap("ims-"+p.id, {labelsOnTop:true, noAttribution:true}); s.startLayer = L.layerGroup().addTo(s.startMap);
+    s.endBox = boxes[1]; s.endMap = U.baseMap("ime-"+p.id, {labelsOnTop:true, noAttribution:true}); s.endLayer = L.layerGroup().addTo(s.endMap);
+    s.built = true;
+  }
+  el.querySelector(".ptop").innerHTML = '<div class="who"><div class="name">'+U.esc(p.name)+'</div><div class="dest">to '+U.esc(p.destLabel)+'</div></div>'+pill;
+  el.querySelector(".headline").innerHTML = '<div class="mins">'+j.duration+'<small>min</small></div>'+
+    '<div class="arrive">Leave '+(depart-new Date()>90000?'at <b>'+U.hhmm(depart)+'</b>':'now')+',<br>arrive <b>'+U.hhmm(arrive)+'</b></div>'+dwHtml;
+  el.querySelector(".steps").innerHTML = steps.join("");
+  el.querySelector(".alerts").innerHTML = alertKeys.slice(0,2).map(function(t){return '<div class="alert '+alerts[t]+'">'+U.esc(t)+'</div>';}).join("");
+  el.querySelector(".alts").innerHTML = altHtml ? 'Also: '+altHtml : 'No alternative routes returned';
+  drawRoute(p, j, alts);
+}
+
+function refreshRoutes(){
+  usedLines = {};
+  CONFIG.people.forEach(function(p){
+    state[p.id] = state[p.id] || {};
+    var from = CONFIG.home.postcode.replace(/\s/g,""), to = p.to.replace(/\s/g,"");
+    var url = U.tflUrl("/Journey/JourneyResults/"+encodeURIComponent(from)+"/to/"+encodeURIComponent(to),
+      {mode:"tube,elizabeth-line,overground,dlr,national-rail,bus,walking",timeIs:"Departing",journeyPreference:"LeastTime",alternativeWalking:"false"});
+    U.getJSON(url).then(function(d){
+      var js = (d && d.journeys) || [];
+      if (!js.length) throw new Error("TfL couldn't match one of the addresses");
+      js.sort(function(a,b){return a.duration-b.duration;});
+      state[p.id].journey = js[0]; state[p.id].alts = js.slice(1);
+      render(p, js[0], js.slice(1));
+      renderLines();
+      U.$("stamp").textContent = "updated "+U.hhmm(new Date());
+    })["catch"](function(e){
+      if (!state[p.id].built) U.$("p-"+p.id).innerHTML = '<div class="perr err"><b>'+U.esc(p.name)+'</b>: couldn\'t get a route from TfL ('+U.esc(e.message)+'). Retrying in 2 minutes.</div>';
+    });
+  });
+}
+
+/* ---------- line status ---------- */
+function refreshLines(){
+  return U.getJSON(U.tflUrl("/Line/Mode/tube,elizabeth-line,overground,dlr/Status")).then(function(arr){
+    lineStatus = {};
+    arr.forEach(function(l){
+      var s = (l.lineStatuses||[]).slice().sort(function(a,b){return a.statusSeverity-b.statusSeverity;})[0] || {};
+      lineStatus[l.id] = {name:l.name, sev:s.statusSeverity==null?10:s.statusSeverity, desc:s.statusSeverityDescription||"Good Service", reason:s.reason||""};
+    });
+    renderLines();
+  })["catch"](function(e){ U.$("lineitems").innerHTML = '<span class="err">Line status unavailable ('+U.esc(e.message)+')</span>'; });
+}
+function renderLines(){
+  var ids = CONFIG.watchLines.slice();
+  Object.keys(usedLines).forEach(function(id){ if (ids.indexOf(id)<0) ids.unshift(id); });
+  ids = ids.filter(function(id){return lineStatus[id];});
+  ids.sort(function(a,b){ var ua=usedLines[a]?0:1, ub=usedLines[b]?0:1; return (lineStatus[a].sev-lineStatus[b].sev) || (ua-ub); });
+  if (!ids.length) return;
+  U.$("lineitems").innerHTML = ids.map(function(id){
+    var s = lineStatus[id], cls = s.sev>=10?"":(s.sev<=6?"bad":"warn");
+    return '<span class="ls"><span class="sw" style="background:'+(U.LINE_COLOURS[id]||"#8a9bad")+'"></span><span class="ln">'+U.esc(s.name)+'</span><span class="st '+cls+'">'+U.esc(s.desc)+'</span></span>';
+  }).join("");
+}
+
+/* ---------- start ---------- */
+U.clock(U.$("clock"), U.$("date"));
+U.drift(U.$("shell"));
+U.nightlyReload();
+U.autoSwitch(true, "aircraft.html");
+U.resolveHome().then(function(){
+  refreshLines().then(refreshRoutes, refreshRoutes);
+  refreshWeather();
+});
+setInterval(function(){ refreshLines().then(refreshRoutes, refreshRoutes); }, CONFIG.routeRefreshSec*1000);
+setInterval(refreshWeather, CONFIG.weatherRefreshSec*1000);
+</script>
+</body>
+</html>

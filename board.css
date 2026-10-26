@@ -1,0 +1,41 @@
+/* Chiswick Board shared styles. Single dark theme on purpose: it lives on a TV. */
+:root{
+  --bg:#0b1118;
+  --panel:#111a24;
+  --panel-2:#17222f;
+  --line:#22303f;
+  --fg:#e8eef4;
+  --muted:#8a9bad;
+  --faint:#566576;
+  --amber:#ffb627;
+  --good:#3ecf8e;
+  --warn:#ffb627;
+  --bad:#ff5d5d;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow",Arial,Helvetica,sans-serif;
+  --mono:"JetBrains Mono",Consolas,"Courier New",monospace;
+  --u:clamp(10px,0.95vw,22px);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden}
+body{font-size:var(--u)}
+.shell{height:100%;padding:calc(var(--u)*1.0) calc(var(--u)*1.3);transition:transform 2s ease}
+
+header.top{display:flex;align-items:center;gap:calc(var(--u)*1.4);border-bottom:1px solid var(--line);padding-bottom:calc(var(--u)*0.6);min-width:0}
+.clock{font-family:var(--display);font-weight:600;font-size:calc(var(--u)*3.2);letter-spacing:.02em;line-height:1;font-variant-numeric:tabular-nums}
+.clock .s{color:var(--muted);font-size:.5em;margin-left:.15em}
+.date{font-family:var(--display);font-size:calc(var(--u)*1.4);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.eyebrow{font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-size:calc(var(--u)*0.95);color:var(--muted);display:flex;justify-content:space-between;align-items:baseline;gap:1em}
+.stamp{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:0;text-transform:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
+.err{color:var(--muted);line-height:1.4}
+
+.leaflet-container{font-family:var(--body);background:#0d141c}
+.leaflet-control-attribution{background:rgba(11,17,24,.7)!important;color:#6d7d8e!important;font-size:10px}
+.leaflet-control-attribution a{color:#8a9bad!important}
+.pin{width:14px;height:14px;border-radius:50%;border:3px solid var(--bg);box-shadow:0 0 0 2px currentColor;background:currentColor}
+.pinlabel{font-family:var(--display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#fff;text-shadow:0 0 4px #000,0 0 4px #000;white-space:nowrap;margin:-1px 0 0 18px}
+svg.wx{color:#c3ceda;flex:0 0 auto;vertical-align:middle}
+
+@media (prefers-reduced-motion:reduce){.shell{transition:none}}

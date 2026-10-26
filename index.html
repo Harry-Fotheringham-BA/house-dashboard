@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Chiswick Board</title>
+<style>html,body{margin:0;height:100%;background:#0b1118;color:#8a9bad;font:16px Arial,sans-serif;display:flex;align-items:center;justify-content:center}</style>
+</head>
+<body>
+<p>Opening Chiswick Board…</p>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+// Bookmark this page on the TV. It shows routes during the weekday commute
+// window and aircraft the rest of the time, switching automatically.
+location.replace((U.inCommute(new Date()) ? "routes.html" : "aircraft.html") + "?auto=1");
+</script>
+</body>
+</html>

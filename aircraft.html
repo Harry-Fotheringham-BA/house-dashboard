@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chiswick Board · Aircraft</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="board.css">
+<style>
+/* Layout: radar-style map filling the left, an ops column on the right. */
+.shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,calc(var(--u)*30));gap:calc(var(--u)*0.9)}
+#mapwrap{position:relative;border-radius:6px;overflow:hidden;border:1px solid var(--line);min-height:0}
+#map{position:absolute;inset:0}
+.side{display:flex;flex-direction:column;gap:calc(var(--u)*0.8);min-height:0}
+.side header.top{border-bottom:0;padding-bottom:0}
+.box{padding:calc(var(--u)*0.8) calc(var(--u)*1)}
+
+/* ops */
+.opsdir{font-family:var(--display);font-weight:700;font-size:calc(var(--u)*3);line-height:1;color:var(--amber);margin-top:.15em}
+.opsdir small{font-size:.45em;color:var(--muted);font-weight:500;letter-spacing:.05em;margin-left:.3em}
+.opsrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5em;margin-top:.7em}
+.kv .k{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:calc(var(--u)*0.8);color:var(--muted)}
+.kv .v{font-family:var(--display);font-weight:600;font-size:calc(var(--u)*1.8);line-height:1.05;font-variant-numeric:tabular-nums}
+.kv .v.arr{color:#7cc4ff}
+.kv .v.dep{color:var(--good)}
+
+/* weather */
+.wxrow{display:flex;align-items:center;gap:.7em;margin-top:.4em}
+.wxrow .t{font-family:var(--display);font-weight:600;font-size:calc(var(--u)*2.4);line-height:1}
+.wxrow .d{color:var(--muted);line-height:1.3}
+.wxrow .d b{color:var(--fg);font-weight:600}
+.metar{margin-top:.6em;font-family:var(--mono);font-size:calc(var(--u)*0.85);color:#b9c6d3;background:var(--panel-2);padding:.45em .6em;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* nearest */
+.near{flex:1 1 auto;min-height:0;overflow:hidden}
+.near table{width:100%;border-collapse:collapse;margin-top:.4em;font-family:var(--mono);font-size:calc(var(--u)*0.95);font-variant-numeric:tabular-nums}
+.near td{padding:.32em 0;border-top:1px solid var(--line);white-space:nowrap}
+.near td.r{text-align:right;padding-left:.6em}
+.near .cs{font-weight:600}
+.near tr.ba .cs{color:var(--amber)}
+.near .ty{color:var(--muted);padding-left:.6em}
+.phase{font-family:var(--display);font-size:.9em;letter-spacing:.06em;padding:.05em .35em;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+.phase.arr{color:#7cc4ff;border-color:#2b4e6e}
+.phase.dep{color:var(--good);border-color:#1f5a43}
+
+/* map overlays */
+.plane{position:relative}
+.plane svg{display:block;filter:drop-shadow(0 0 3px rgba(0,0,0,.85))}
+.plane .tag{position:absolute;left:calc(100% + 2px);top:-3px;white-space:nowrap;font-family:var(--mono);font-size:11px;line-height:1.15;color:#cfd9e3;text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000}
+.plane .tag b{color:#fff;font-weight:600}
+.plane.ba .tag b{color:var(--amber)}
+.legend{position:absolute;left:10px;bottom:22px;z-index:500;display:flex;gap:.8em;align-items:center;font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(11,17,24,.8);padding:.35em .6em;border-radius:4px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.3em;vertical-align:-1px}
+#feed{position:absolute;left:10px;top:10px;z-index:500;font-family:var(--mono);font-size:11px;color:var(--muted);background:rgba(11,17,24,.8);padding:.35em .6em;border-radius:4px;max-width:70%}
+#feed.bad{color:#ffcfcf;border:1px solid #6e2a2a}
+
+@media (max-width:900px){
+  html,body{overflow:auto}
+  .shell{grid-template-columns:1fr;height:auto}
+  #mapwrap{height:65vh}
+}
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="feed">Connecting to aircraft feed…</div>
+    <div class="legend">
+      <span><i style="background:#ff8a5c"></i>&lt;3k ft</span>
+      <span><i style="background:#ffd166"></i>&lt;8k</span>
+      <span><i style="background:#7cc4ff"></i>&lt;20k</span>
+      <span><i style="background:#c9b6ff"></i>cruise</span>
+      <span><i style="background:#ffb627"></i>BA</span>
+    </div>
+  </div>
+
+  <aside class="side">
+    <header class="top">
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+    </header>
+
+    <section class="card box">
+      <div class="eyebrow"><span>Heathrow ops</span><span class="stamp" id="opsbasis"></span></div>
+      <div class="opsdir" id="opsdir">—</div>
+      <div class="opsrow">
+        <div class="kv"><div class="k">Arriving</div><div class="v arr" id="opsarr">–</div></div>
+        <div class="kv"><div class="k">Departing</div><div class="v dep" id="opsdep">–</div></div>
+        <div class="kv"><div class="k">Airborne</div><div class="v" id="opsall">–</div></div>
+      </div>
+    </section>
+
+    <section class="card box">
+      <div class="eyebrow"><span>Weather at home</span></div>
+      <div class="wxrow" id="wx"><span class="err">Loading weather…</span></div>
+      <div class="metar" id="metar">Wind — · QNH —</div>
+    </section>
+
+    <section class="card box near">
+      <div class="eyebrow"><span>Nearest to home</span><span class="stamp" id="nearstamp"></span></div>
+      <table><tbody id="rows"><tr><td class="err">Waiting for aircraft…</td></tr></tbody></table>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+var LHR = {lat:51.4700, lon:-0.4543};
+var AIRLINES = {BAW:"BA",SHT:"BA",EFW:"BA",CFE:"BA",VIR:"VS",EIN:"EI",DLH:"LH",AFR:"AF",KLM:"KL",UAE:"EK",QTR:"QR",AAL:"AA",UAL:"UA",DAL:"DL",
+  ACA:"AC",SIA:"SQ",CPA:"CX",ETD:"EY",THY:"TK",SWR:"LX",AUA:"OS",IBE:"IB",TAP:"TP",SAS:"SK",FIN:"AY",AIC:"AI",QFA:"QF",JAL:"JL",ANA:"NH",
+  KAL:"KE",SVA:"SV",GFA:"GF",RAM:"AT",ELY:"LY",EZY:"U2",RYR:"FR",LOG:"LM",AEE:"A3",ITY:"AZ",LOT:"LO",BEL:"SN",CCA:"CA",CES:"MU",CSN:"CZ",
+  MSR:"MS",KQA:"KQ",ETH:"ET",SAA:"SA",PIA:"PK",ALK:"UL",MAS:"MH",THA:"TG",VJT:"VJ",AIJ:"4O",BCY:"CJ",LNE:"WT",JBU:"B6",ICE:"FI",TOM:"BY",EXS:"LS"};
+var wind = null;   // latest wind for ops fallback
+
+var map = U.baseMap("map",{extraAttribution:" · aircraft: adsb.lol / airplanes.live / adsb.fi"});
+map.setView([51.482,-0.345], 11);
+// Heathrow runways
+[[[51.4648,-0.4823],[51.4648,-0.4340]],[[51.4775,-0.4850],[51.4776,-0.4332]]].forEach(function(r){
+  L.polyline(r,{color:"#ffb627",weight:4,opacity:.6}).addTo(map);
+});
+var homePin = U.pin(map, CONFIG.home.lat, CONFIG.home.lon, "Home", "#ffb627");
+U.pin(map, 51.4725, -0.4258, "Vanguard Hse", "#8a9bad");
+
+function altColour(ft){
+  if (ft==="ground" || ft==null) return "#6d7d8e";
+  if (ft<3000) return "#ff8a5c";
+  if (ft<8000) return "#ffd166";
+  if (ft<20000) return "#7cc4ff";
+  return "#c9b6ff";
+}
+function planeSvg(colour,deg){
+  return '<svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate('+(deg||0)+'deg)"><path fill="'+colour+'" stroke="#0b1118" stroke-width="0.8" d="M12 1.5c.8 0 1.3.9 1.3 2v5.6l8.2 4.8v2.1l-8.2-2.4v4.6l2.4 1.8v1.7L12 20.8l-3.7 1v-1.7l2.4-1.8v-4.6l-8.2 2.4V14l8.2-4.8V3.5c0-1.1.5-2 1.3-2z"/></svg>';
+}
+function distKm(aLat,aLon,bLat,bLon){
+  var R=6371, dLat=(bLat-aLat)*Math.PI/180, dLon=(bLon-aLon)*Math.PI/180;
+  var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(aLat*Math.PI/180)*Math.cos(bLat*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function flightNo(cs){
+  cs = (cs||"").trim(); var pre = cs.slice(0,3), rest = cs.slice(3);
+  return AIRLINES[pre] && /^\d/.test(rest) ? AIRLINES[pre]+rest : cs;
+}
+function phaseOf(a){
+  var alt = a.alt_baro, d = distKm(LHR.lat,LHR.lon,a.lat,a.lon), vr = a.baro_rate!=null ? a.baro_rate : (a.geom_rate||0);
+  if (alt==="ground") return d<4 ? "gnd" : "";
+  if (typeof alt!=="number" || alt>9000 || d>45) return "";
+  if (vr<-300) return "arr";
+  if (vr>300) return "dep";
+  return "";
+}
+
+/* ---------- feed: relay first, then direct sources ---------- */
+var DIRECT = [
+  function(lat,lon,r){ return "https://api.adsb.lol/v2/point/"+lat+"/"+lon+"/"+r; },
+  function(lat,lon,r){ return "https://api.airplanes.live/v2/point/"+lat+"/"+lon+"/"+r; },
+  function(lat,lon,r){ return "https://opendata.adsb.fi/api/v2/lat/"+lat+"/lon/"+lon+"/dist/"+r; }
+];
+var directIdx = 0;
+function fetchPlanes(){
+  var c = map.getCenter(), lat=c.lat.toFixed(3), lon=c.lng.toFixed(3), r=CONFIG.planeRadiusNm;
+  var p;
+  if (CONFIG.relay){
+    p = U.getJSON(CONFIG.relay.replace(/\/$/,"")+"/planes?lat="+lat+"&lon="+lon+"&r="+r).then(function(d){
+      if (d.error) throw new Error(d.error);
+      return {ac:d.ac||[], src:"relay → "+(d.source||"?")};
+    });
+  } else {
+    var tried = 0;
+    var attempt = function(){
+      var url = DIRECT[directIdx](lat,lon,r);
+      return U.getJSON(url).then(function(d){ return {ac:d.ac||d.aircraft||[], src:url.split("/")[2]}; })["catch"](function(e){
+        tried++; directIdx=(directIdx+1)%DIRECT.length;
+        if (tried<DIRECT.length) return attempt();
+        throw new Error("blocked by the browser (CORS). Deploy relay-worker.js and set CONFIG.relay");
+      });
+    };
+    p = attempt();
+  }
+  p.then(function(res){
+    drawPlanes(res.ac);
+    var f = U.$("feed"); f.className=""; f.textContent = "Live · "+res.src+" · "+U.hhmm(new Date());
+  })["catch"](function(e){
+    var f = U.$("feed"); f.className="bad"; f.textContent = "Aircraft feed unavailable: "+e.message;
+  });
+}
+
+/* ---------- drawing ---------- */
+var markers = {}, trails = {};
+function drawPlanes(ac){
+  var seen = {}, rows = [], arr=0, dep=0, west=0, east=0, airborne=0;
+  ac.forEach(function(a){
+    if (a.lat==null || a.lon==null) return;
+    var id = a.hex; seen[id] = true;
+    var cs = (a.flight||"").trim(), ph = phaseOf(a), isBA = /^(BAW|SHT|EFW|CFE)/.test(cs);
+    var onGround = a.alt_baro==="ground";
+    if (!onGround) airborne++;
+    if (ph==="arr"){ arr++; if (typeof a.track==="number"){ if (a.track>200&&a.track<340) west++; else if (a.track>20&&a.track<160) east++; } }
+    if (ph==="dep") dep++;
+    var altTxt = onGround ? "GND" : (typeof a.alt_baro==="number" ? (a.alt_baro>=6000 ? "FL"+U.pad(Math.round(a.alt_baro/100)) : a.alt_baro+"ft") : "");
+    var colour = isBA ? "#ffb627" : altColour(a.alt_baro);
+    var label = flightNo(cs) || a.r || id;
+    var html = '<div class="plane'+(isBA?" ba":"")+'">'+planeSvg(colour, a.track!=null?a.track:(a.true_heading||0))+
+      (onGround ? "" : '<div class="tag"><b>'+U.esc(label)+'</b><br>'+U.esc(altTxt)+(a.t?' '+U.esc(a.t):'')+'</div>')+'</div>';
+    var icon = L.divIcon({className:"",iconSize:[22,22],iconAnchor:[11,11],html:html});
+    if (markers[id]){ markers[id].setLatLng([a.lat,a.lon]); markers[id].setIcon(icon); }
+    else markers[id] = L.marker([a.lat,a.lon],{icon:icon,interactive:false}).addTo(map);
+
+    if (!onGround){
+      var t = trails[id];
+      if (!t){ t = trails[id] = {pts:[], line:L.polyline([], {weight:2, opacity:.45, interactive:false}).addTo(map)}; }
+      var last = t.pts[t.pts.length-1];
+      if (!last || last[0]!==a.lat || last[1]!==a.lon) t.pts.push([a.lat,a.lon]);
+      if (t.pts.length>25) t.pts.shift();
+      t.line.setLatLngs(t.pts); t.line.setStyle({color:colour});
+      rows.push({a:a,label:label,isBA:isBA,ph:ph,altTxt:altTxt,d:distKm(CONFIG.home.lat,CONFIG.home.lon,a.lat,a.lon)});
+    }
+  });
+  Object.keys(markers).forEach(function(id){ if(!seen[id]){ map.removeLayer(markers[id]); delete markers[id]; } });
+  Object.keys(trails).forEach(function(id){ if(!seen[id]){ map.removeLayer(trails[id].line); delete trails[id]; } });
+
+  rows.sort(function(x,y){return x.d-y.d;});
+  U.$("rows").innerHTML = rows.slice(0,12).map(function(r){
+    var ph = r.ph==="arr" ? '<span class="phase arr">ARR</span>' : (r.ph==="dep" ? '<span class="phase dep">DEP</span>' : '');
+    var gs = r.a.gs!=null ? Math.round(r.a.gs)+'kt' : '';
+    return '<tr class="'+(r.isBA?"ba":"")+'"><td class="cs">'+U.esc(r.label)+'</td><td class="ty">'+U.esc(r.a.t||"")+'</td>'+
+      '<td class="r">'+U.esc(r.altTxt)+'</td><td class="r">'+gs+'</td><td class="r">'+r.d.toFixed(1)+'km</td><td class="r">'+ph+'</td></tr>';
+  }).join("") || '<tr><td class="err">Quiet skies right now.</td></tr>';
+  U.$("nearstamp").textContent = U.hhmm(new Date());
+  U.$("opsarr").textContent = arr; U.$("opsdep").textContent = dep; U.$("opsall").textContent = airborne;
+
+  var dir = null, basis = "";
+  if (west+east>=2){ dir = west>=east ? "W" : "E"; basis = "from arrival tracks"; }
+  else if (wind){ dir = (wind.dir>=180 || wind.dir<10) ? "W" : "E"; basis = "estimated from wind"; }
+  U.$("opsdir").innerHTML = dir ? (dir==="W" ? 'Westerly<small>27L / 27R</small>' : 'Easterly<small>09L / 09R</small>') : '—';
+  U.$("opsbasis").textContent = basis;
+}
+
+/* ---------- weather ---------- */
+function refreshWeather(){
+  U.weather(CONFIG.home.lat, CONFIG.home.lon, "kn").then(function(w){
+    var c = w.current;
+    wind = {dir:c.wind_direction_10m, spd:c.wind_speed_10m};
+    var i = U.hourIndex(w), rain = w.hourly.precipitation_probability[i+1];
+    U.$("wx").innerHTML = U.wxIcon(c.weather_code, c.is_day, 44)+'<div class="t">'+Math.round(c.temperature_2m)+'°</div>'+
+      '<div class="d"><b>'+U.wxText(c.weather_code)+'</b><br>'+(rain!=null?rain+'% rain next hour':'')+'</div>';
+    var dir = U.pad(Math.round(c.wind_direction_10m/10)*10 % 360 || 360);
+    if (dir.length<3) dir = "0"+dir;
+    var gust = c.wind_gusts_10m - c.wind_speed_10m >= 10 ? "G"+Math.round(c.wind_gusts_10m) : "";
+    U.$("metar").textContent = "Wind "+dir+"°/"+Math.round(c.wind_speed_10m)+(gust?gust:"")+"kt · QNH "+Math.round(c.pressure_msl)+" · Cloud "+c.cloud_cover+"%";
+  })["catch"](function(e){ U.$("wx").innerHTML = '<span class="err">Weather unavailable ('+U.esc(e.message)+')</span>'; });
+}
+
+/* ---------- start ---------- */
+U.clock(U.$("clock"), U.$("date"));
+U.drift(U.$("shell"));
+U.nightlyReload();
+U.autoSwitch(false, "routes.html");
+U.resolveHome().then(function(){ homePin.setLatLng([CONFIG.home.lat, CONFIG.home.lon]); refreshWeather(); });
+fetchPlanes(); setInterval(fetchPlanes, CONFIG.planeRefreshSec*1000);
+setInterval(refreshWeather, CONFIG.weatherRefreshSec*1000);
+</script>
+</body>
+</html>
