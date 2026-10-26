@@ -9,6 +9,7 @@ var CONFIG = {
   // "https://chiswick-relay.harry.workers.dev"
   // Leave blank to try the aircraft feeds directly (often blocked by the browser).
   relay: "https://chiswick-relay.harry-fotheringham.workers.dev/",
+  cartoKey: "cb1_4vg6_1_878b6431d6e6bd0fdb421ec8",
 
   home: { label: "Home", postcode: "W4 1SE", lat: 51.4952, lon: -0.2478 },
 
