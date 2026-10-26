@@ -11,7 +11,7 @@
 /* Layout: radar-style map filling the left, an ops column on the right. */
 .shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,calc(var(--u)*30));gap:calc(var(--u)*0.9)}
 #mapwrap{position:relative;border-radius:6px;overflow:hidden;border:1px solid var(--line);min-height:0}
-#map{position:absolute;inset:0}
+#map{position:absolute;top:0;right:0;bottom:0;left:0}
 .side{display:flex;flex-direction:column;gap:calc(var(--u)*0.8);min-height:0}
 .side header.top{border-bottom:0;padding-bottom:0}
 .box{padding:calc(var(--u)*0.8) calc(var(--u)*1)}

@@ -14,7 +14,7 @@
   --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
   --body:"Barlow",Arial,Helvetica,sans-serif;
   --mono:"JetBrains Mono",Consolas,"Courier New",monospace;
-  --u:clamp(10px,0.95vw,22px);
+  --u:16px;  /* set from the screen width in common.js (older TV browsers lack clamp) */
   color-scheme:dark;
 }
 *{box-sizing:border-box}

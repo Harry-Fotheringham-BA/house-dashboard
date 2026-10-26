@@ -1,5 +1,48 @@
 /* Shared helpers for Chiswick Board pages. Written in plain ES5-ish JS so
    older LG webOS browsers run it. */
+/* ---- TV browser support: text scale + on-screen diagnostics ---- */
+(function () {
+  function scale() {
+    var u = Math.max(10, Math.min(22, window.innerWidth * 0.0095));
+    document.documentElement.style.setProperty("--u", u + "px");
+  }
+  scale();
+  window.addEventListener("resize", scale);
+
+  var debug = /[?&]debug=1/.test(location.search), errors = [];
+  window.__tileErrors = 0;
+  function panel() {
+    var el = document.getElementById("__diag");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "__diag";
+      el.style.cssText = "position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:rgba(40,8,8,.94);color:#ffd6d6;" +
+        "font:13px/1.4 Consolas,monospace;padding:8px 10px;border:1px solid #a33;border-radius:4px;white-space:pre-wrap;max-height:45%;overflow:hidden";
+      (document.body || document.documentElement).appendChild(el);
+    }
+    return el;
+  }
+  function show() {
+    if (!debug && !errors.length) return;
+    var lines = [];
+    if (debug) {
+      lines.push("Browser: " + navigator.userAgent);
+      lines.push("Screen: " + window.innerWidth + "x" + window.innerHeight + "  fetch:" + (typeof fetch) + "  Leaflet:" + (window.L ? L.version : "NOT LOADED"));
+      var maps = document.querySelectorAll(".leaflet-container");
+      for (var i = 0; i < maps.length; i++) lines.push("Map " + (i + 1) + ": " + maps[i].offsetWidth + "x" + maps[i].offsetHeight + "px, tiles loaded: " + maps[i].querySelectorAll(".leaflet-tile-loaded").length);
+      lines.push("Tile errors: " + window.__tileErrors);
+    }
+    if (errors.length) lines.push("Errors:\n" + errors.slice(-6).join("\n"));
+    panel().textContent = lines.join("\n");
+  }
+  window.addEventListener("error", function (e) {
+    errors.push((e.message || "error") + (e.filename ? " @ " + e.filename.split("/").pop() + ":" + e.lineno : ""));
+    show();
+  });
+  window.addEventListener("unhandledrejection", function (e) { errors.push("Promise: " + (e.reason && e.reason.message || e.reason)); show(); });
+  if (debug) { setTimeout(show, 1500); setInterval(show, 3000); }
+})();
+
 var U = (function () {
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -150,7 +193,8 @@ var U = (function () {
       // No CARTO key: OpenStreetMap's own tiles, darkened in CSS to match the board
       map.getContainer().className += " osm-dark";
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" + extra }).addTo(map);
+        maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" + extra })
+        .on("tileerror", function () { window.__tileErrors++; }).addTo(map);
       if (opts && opts.noAttribution) map.attributionControl.remove();
       return map;
     }
