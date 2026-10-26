@@ -49,7 +49,8 @@
 .icap{position:absolute;left:0;right:0;bottom:0;z-index:600;padding:.5em .7em .45em;background:linear-gradient(to top,rgba(11,17,24,.95),rgba(11,17,24,.75) 70%,rgba(11,17,24,0));font-size:calc(var(--u)*0.85);line-height:1.25;color:#b6c2ce}
 .icap b{color:var(--fg);font-weight:600}
 .icap .k{display:block;font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:.9em;color:var(--muted)}
-.leaflet-tile-pane{filter:brightness(1.55) contrast(1.05)}
+.carto .leaflet-tile-pane{filter:brightness(1.55) contrast(1.05)}
+.osm-dark .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.45)}
 .mstop{width:7px;height:7px;border-radius:50%;background:#e8eef4;border:2px solid #0b1118}
 .steps{padding:calc(var(--u)*0.6) calc(var(--u)*1) calc(var(--u)*0.4);display:flex;flex-direction:column;gap:.15em}
 .step{display:grid;grid-template-columns:calc(var(--u)*3.6) .35em minmax(0,1fr) auto;align-items:center;gap:.6em;font-size:calc(var(--u)*1.05);padding:.22em 0}

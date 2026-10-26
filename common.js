@@ -145,20 +145,32 @@ var U = (function () {
       zoomControl: false, attributionControl: true, keyboard: false, dragging: false,
       scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, touchZoom: false, zoomSnap: 0.25
     });
-    var attr = "&copy; OpenStreetMap &copy; CARTO" + ((opts && opts.extraAttribution) || "");
+    var extra = (opts && opts.extraAttribution) || "";
+    if (!CONFIG.cartoKey) {
+      // No CARTO key: OpenStreetMap's own tiles, darkened in CSS to match the board
+      map.getContainer().className += " osm-dark";
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" + extra }).addTo(map);
+      if (opts && opts.noAttribution) map.attributionControl.remove();
+      return map;
+    }
+    map.getContainer().className += " carto";
+    var k = "?key=" + encodeURIComponent(CONFIG.cartoKey);
+    var base = "https://basemaps.cartocdn.com/rastertiles/";
+    var attr = "&copy; OpenStreetMap &copy; CARTO" + extra;
     if (opts && opts.labelsOnTop) {
       // streets underneath, route lines in the middle, place names on top
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
-        maxZoom: 19, subdomains: "abcd", attribution: attr }).addTo(map);
+      L.tileLayer(base + "dark_nolabels/{z}/{x}/{y}.png" + k, {
+        maxZoom: 19, attribution: attr }).addTo(map);
       map.createPane("labels");
       map.getPane("labels").style.zIndex = 450;
       map.getPane("labels").style.pointerEvents = "none";
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", {
-        maxZoom: 19, subdomains: "abcd", pane: "labels" }).addTo(map);
+      L.tileLayer(base + "dark_only_labels/{z}/{x}/{y}.png" + k, {
+        maxZoom: 19, pane: "labels" }).addTo(map);
       if (opts.noAttribution) map.attributionControl.remove();
     } else {
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        maxZoom: 18, subdomains: "abcd", attribution: attr }).addTo(map);
+      L.tileLayer(base + "dark_all/{z}/{x}/{y}.png" + k, {
+        maxZoom: 18, attribution: attr }).addTo(map);
     }
     return map;
   }

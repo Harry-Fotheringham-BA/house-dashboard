@@ -34,6 +34,8 @@ header.top{display:flex;align-items:center;gap:calc(var(--u)*1.4);border-bottom:
 .leaflet-container{font-family:var(--body);background:#0d141c}
 .leaflet-control-attribution{background:rgba(11,17,24,.7)!important;color:#6d7d8e!important;font-size:10px}
 .leaflet-control-attribution a{color:#8a9bad!important}
+/* OpenStreetMap fallback: invert the light map into a dark one */
+.osm-dark .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.35)}
 .pin{width:14px;height:14px;border-radius:50%;border:3px solid var(--bg);box-shadow:0 0 0 2px currentColor;background:currentColor}
 .pinlabel{font-family:var(--display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#fff;text-shadow:0 0 4px #000,0 0 4px #000;white-space:nowrap;margin:-1px 0 0 18px}
 svg.wx{color:#c3ceda;flex:0 0 auto;vertical-align:middle}
