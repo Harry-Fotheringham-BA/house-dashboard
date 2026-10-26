@@ -327,13 +327,26 @@ function render(p, j, alts){
   drawRoute(p, j, alts);
 }
 
+/* Preview another departure time: routes.html?at=0745 plans for 07:45 on the
+   next weekday (today if it's a weekday and 07:45 hasn't passed yet). */
+function testTime(){
+  var at = U.qs("at");
+  if (!at || !/^\d{4}$/.test(at)) return null;
+  var d = new Date(), mins = (+at.slice(0,2))*60 + (+at.slice(2));
+  if (d.getHours()*60+d.getMinutes() >= mins) d.setDate(d.getDate()+1);
+  while (d.getDay()===0 || d.getDay()===6) d.setDate(d.getDate()+1);
+  return { date: d.getFullYear()+U.pad(d.getMonth()+1)+U.pad(d.getDate()), time: at,
+    label: d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})+" "+at.slice(0,2)+":"+at.slice(2) };
+}
 function refreshRoutes(){
   usedLines = {};
   CONFIG.people.forEach(function(p){
     state[p.id] = state[p.id] || {};
     var from = CONFIG.home.postcode.replace(/\s/g,""), to = p.to.replace(/\s/g,"");
-    var url = U.tflUrl("/Journey/JourneyResults/"+encodeURIComponent(from)+"/to/"+encodeURIComponent(to),
-      {mode:"tube,elizabeth-line,overground,dlr,national-rail,bus,walking",timeIs:"Departing",journeyPreference:"LeastTime",alternativeWalking:"false"});
+    var params = {mode:"tube,elizabeth-line,overground,dlr,national-rail,bus,walking",timeIs:"Departing",journeyPreference:"LeastTime",alternativeWalking:"false"};
+    var at = testTime();
+    if (at){ params.date = at.date; params.time = at.time; }
+    var url = U.tflUrl("/Journey/JourneyResults/"+encodeURIComponent(from)+"/to/"+encodeURIComponent(to), params);
     U.getJSON(url).then(function(d){
       var js = (d && d.journeys) || [];
       if (!js.length) throw new Error("TfL couldn't match one of the addresses");
@@ -341,7 +354,9 @@ function refreshRoutes(){
       state[p.id].journey = js[0]; state[p.id].alts = js.slice(1);
       render(p, js[0], js.slice(1));
       renderLines();
-      U.$("stamp").textContent = "updated "+U.hhmm(new Date());
+      var tt = testTime();
+      U.$("stamp").textContent = tt ? "PREVIEW · routes for "+tt.label : "updated "+U.hhmm(new Date());
+      if (tt) U.$("stamp").style.color = "#ffb627";
     })["catch"](function(e){
       if (!state[p.id].built) U.$("p-"+p.id).innerHTML = '<div class="perr err"><b>'+U.esc(p.name)+'</b>: couldn\'t get a route from TfL ('+U.esc(e.message)+'). Retrying in 2 minutes.</div>';
     });
